@@ -1,0 +1,10 @@
+"timer.obj",
+"uart.obj",
+"ps2.obj",
+"lvd.obj",
+"eeprom.obj",
+"delay.obj",
+"ir.obj",
+"pcatimer.obj",
+"laplace_robot.obj" 
+TO "laplace_robot" 

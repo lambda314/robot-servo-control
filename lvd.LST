@@ -1,0 +1,71 @@
+C51 COMPILER V9.01   LVD                                                                   11/19/2016 22:07:33 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE LVD
+OBJECT MODULE PLACED IN lvd.OBJ
+COMPILER INVOKED BY: d:\C51\BIN\C51.EXE lvd.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "lvd.h"
+   2          #include "delay.h"
+   3          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+   4          函数名称：lvd_interrupt
+   5          函数功能；低压中断检测中断服务程序
+   6          输入参数：无
+   7          输出参数：无
+   8          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+   9          void lvd_interrupt(void) interrupt 6           
+  10          {
+  11   1              uint f;
+  12   1              P4=0xfe;
+  13   1          PCON &= 0xdf;                   //clear LVD flag
+  14   1              if(PCON & 0x20)
+  15   1                      PCON &= 0xdf;               //clear LVD flag
+  16   1              for(f=0;f<2;f++)
+  17   1              {
+  18   2                      P4=0xff;
+  19   2                      delay10ms(5);
+  20   2                      P4=0xfe;
+  21   2                      delay10ms(5);
+  22   2              }
+  23   1      }
+  24          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+  25          函数名称：lvd_init
+  26          函数功能；低压中断检测初始化
+  27          输入参数：无
+  28          输出参数：无
+  29          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+  30          void lvd_init(void)
+  31          {
+  32   1              PCON &= 0xdf;                                   //clear LVD flag
+  33   1              if(PCON & 0x20)
+  34   1                      PCON &= 0xdf;                           //clear LVD flag
+  35   1              P4&=0xfe;
+  36   1              IP &= 0xbf;                                             //PLVD=0;
+  37   1              IPH|= 0x40;                                             //PLVDH=1;PLVDH:PLVD=1:0低压检测为较高优先级（优先级2）
+  38   1          P4SW &= 0xbf;                   //Set P4.6 as LVD function pin
+  39   1          WAKE_CLKO = 0x08;               //enable LVD signal wakeup MCU from power-down mode
+  40   1          ELVD = 1;                       //enable LVD interrupt
+  41   1          EA = 1;                         //open global interrupt switch
+  42   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    140    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       2
+   IDATA SIZE       =   ----    ----
+C51 COMPILER V9.01   LVD                                                                   11/19/2016 22:07:33 PAGE 2   
+
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

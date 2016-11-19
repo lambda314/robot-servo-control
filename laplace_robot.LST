@@ -1,0 +1,1037 @@
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE LAPLACE_ROBOT
+OBJECT MODULE PLACED IN laplace_robot.OBJ
+COMPILER INVOKED BY: d:\C51\BIN\C51.EXE laplace_robot.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          /*********************************************************************************************************
+             -**************************
+   2          文件名称：robot_test.c
+   3          文件内容：
+   4          创建人  ：拉普拉斯开源智能机器人
+   5          创建时间：2014
+   6          **********************************************************************************************************
+             -**************************/
+   7          
+   8          #include<math.h>
+   9          #include<intrins.h>
+  10          #include"stc12c5a60s2.h"
+  11          #include"datatype.h"
+  12          #include"delay.h"
+  13          #include"ps2.h"
+  14          #include"lvd.h"
+  15          #include"timer.h"
+  16          #include"uart.h" 
+  17          #include"eeprom.h"
+  18          #include"ir.h"
+  19          
+  20          sbit Fmq = P4^0;
+  21          sbit Qdj = P4^1;
+  22          
+  23          
+  24          #define swap(x,y) {int t; t = x; x = y; y = t;}
+  25          
+  26          
+  27          uchar xdata position[24]={0};
+  28          uchar xdata robotrun[25];
+  29          uchar xdata runmore[30][26];     //100 
+  30          uchar xdata sort[24];
+  31          uchar xdata pick_up[24];
+  32          schar xdata changepos[25]={0};
+  33          uchar m;
+  34          uchar n;
+  35          
+  36          uchar posaim[26];
+  37          
+  38          uint  xdata eeprom_addr1  = 64;
+  39          uint  xdata eeprom_addr2  = 5440;
+  40          uint  xdata eeprom_addr3  = 10880;
+  41          uint  xdata eeprom_addr4  = 16320;
+  42          uint  xdata eeprom_addr5  = 21760;
+  43          uint  xdata eeprom_addr6  = 27200;
+  44          uint  xdata eeprom_addr7  = 0;
+  45          uint  xdata eeprom_addr8  = 5440;
+  46          uint  xdata eeprom_addr9  = 10880;
+  47          uint  xdata eeprom_addr10 = 16320;
+  48          uint  xdata eeprom_addr11 = 21760;
+  49          uint  xdata eeprom_addr12 = 27200;
+  50                                      
+  51          bit flag_run=0;
+  52          bit flag_ispr=0;
+  53          bit flag_initpos=0;
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 2   
+
+  54          bit flag_runmore=0;
+  55          bit flag_swj=0;
+  56          
+  57          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+  58          函数名称：void low_level_500u
+  59          函数功能：PWM信号低电平时间子程序，控制舵机PWM信号的低电平时间决定舵机转动的速度  
+  60          输入    ：  time
+  61          输出    ：无
+  62          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+  63          void low_level_500u(uint time)
+  64          {
+  65   1              uint i; 
+  66   1              for(i=0;i<time;i++)
+  67   1              {
+  68   2                      delay500us(1);
+  69   2              }
+  70   1      }
+  71          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+  72          函数名称：sort0()
+  73          函数功能：排序子程序，将各个口的8位根据时间的长短排序 提供sort[i]=sort[i]- sort[i+1]相邻差值
+  74          输入    ：无
+  75          输出    ：无
+  76          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+  77          void sort0(void)
+  78          { 
+  79   1              uchar i=0,j=0,x=0;
+  80   1      
+  81   1              pick_up[0]=0xFE;
+  82   1          pick_up[1]=0xFD;
+  83   1          pick_up[2]=0xFB;
+  84   1          pick_up[3]=0xF7;
+  85   1          pick_up[4]=0xEF;
+  86   1          pick_up[5]=0xDF;
+  87   1          pick_up[6]=0xBF;
+  88   1          pick_up[7]=0x7F;    
+  89   1              
+  90   1      
+  91   1                      
+  92   1              for(i=0;i<7;i++)
+  93   1              {    for(j=i+1;j<8;j++)                                                          
+  94   2               {
+  95   3                              if(sort[i]<sort[j])
+  96   3                              {
+  97   4                                      swap(sort[i],sort[j]);
+  98   4                                      swap(pick_up[i],pick_up[j]);      
+  99   4                              }
+ 100   3               }
+ 101   2              }       
+ 102   1              for(i=0;i<7;i++)
+ 103   1          {
+ 104   2                      sort[i]= sort[i]- sort[i+1];
+ 105   2          }           
+ 106   1      }
+ 107          
+ 108          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+ 109          函数名称：sort1()
+ 110          函数功能：排序子程序，将各个口的8位根据时间的长短排序 提供sort[i]=sort[i]- sort[i+1]相邻差值
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 3   
+
+ 111          输入    ：无
+ 112          输出    ：无
+ 113          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 114          void sort1(void)
+ 115          { 
+ 116   1              uchar i=0,j=0,x=0;
+ 117   1              
+ 118   1              pick_up[8]=0xFE;
+ 119   1          pick_up[9]=0xFD;
+ 120   1          pick_up[10]=0xFB;
+ 121   1          pick_up[11]=0xF7;
+ 122   1          pick_up[12]=0xEF;
+ 123   1          pick_up[13]=0xDF;
+ 124   1          pick_up[14]=0xBF;
+ 125   1          pick_up[15]=0x7F;   
+ 126   1      
+ 127   1      
+ 128   1              for(i=8;i<15;i++)
+ 129   1              {    for(j=i+1;j<16;j++)
+ 130   2               {
+ 131   3                              if(sort[i]<sort[j])
+ 132   3                              {
+ 133   4                                      swap(sort[i],sort[j]);
+ 134   4                                      swap(pick_up[i],pick_up[j]);              
+ 135   4                  }
+ 136   3               }
+ 137   2              }       
+ 138   1              for(i=8;i<15;i++)
+ 139   1          {
+ 140   2                      sort[i]= sort[i]- sort[i+1];
+ 141   2          }           
+ 142   1      }
+ 143          
+ 144          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+ 145          函数名称：sort2()
+ 146          函数功能：排序子程序，将各个口的8位根据时间的长短排序 提供sort[i]=sort[i]- sort[i+1]相邻差值
+ 147          输入    ：无
+ 148          输出    ：无
+ 149          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 150          void sort2(void)
+ 151          { 
+ 152   1              uchar i=0,j=0,x=0;
+ 153   1      
+ 154   1              pick_up[16]=0xFE;
+ 155   1          pick_up[17]=0xFD;
+ 156   1          pick_up[18]=0xFB;
+ 157   1          pick_up[19]=0xF7;
+ 158   1          pick_up[20]=0xEF;
+ 159   1          pick_up[21]=0xDF;
+ 160   1          pick_up[22]=0xBF;
+ 161   1          pick_up[23]=0x7F;   
+ 162   1      
+ 163   1      
+ 164   1              for(i=16;i<23;i++)
+ 165   1              {    for(j=i+1;j<24;j++)
+ 166   2               {
+ 167   3                              if(sort[i]<sort[j])
+ 168   3                              {
+ 169   4                                      swap(sort[i],sort[j]);
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 4   
+
+ 170   4                                      swap(pick_up[i],pick_up[j]);      
+ 171   4                  }
+ 172   3               }
+ 173   2              }       
+ 174   1              for(i=16;i<23;i++)
+ 175   1          {
+ 176   2                      sort[i]= sort[i]- sort[i+1];
+ 177   2          }           
+ 178   1      }
+ 179          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************                                                                                                                                                       
+ 180          函数功能：单片机初始化程序
+ 181          函数名称：read_changepos
+ 182          输入    ：无
+ 183          输出    : 无
+ 184          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 185          void read_changepos(void)
+ 186          {
+ 187   1              uchar r;
+ 188   1              for(r=0;r<24;r++)
+ 189   1                      changepos[r]=(schar)(read_random(32+r));                
+ 190   1              changepos[24] = 0x00;
+ 191   1      }
+ 192          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+ 193          函数名称：pwm24_out
+ 194          函数功能：24路舵机PWM同时输出
+ 195          输入    ：无
+ 196          输出    ：无
+ 197          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 198          
+ 199          void pwm24_out(void)
+ 200          {
+ 201   1              uchar i=0;
+ 202   1      
+ 203   1              for(i=0;i<24;i++)          
+ 204   1              sort[i]=position[i];
+ 205   1      
+ 206   1          sort0();                 
+ 207   1              sort1();           
+ 208   1              sort2();
+ 209   1              
+ 210   1      
+ 211   1              timer0_start(0xee00);                                                      
+ 212   1          P0=0xff;                  
+ 213   1          delay500us(1);            
+ 214   1          for(i=0;i<8;i++)          
+ 215   1          {             
+ 216   2                      delay8us(sort[7-i]);
+ 217   2              P0=P0&pick_up[7-i];               
+ 218   2          } 
+ 219   1          while(!timer0_end)
+ 220   1              {
+ 221   2                      _nop_();
+ 222   2              }                               
+ 223   1              TR0=0;                                             
+ 224   1              
+ 225   1              
+ 226   1              timer0_start(0xee00);                                                      
+ 227   1          P1=0xff;                 
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 5   
+
+ 228   1          delay500us(1);            
+ 229   1          for(i=0;i<8;i++)          
+ 230   1          {             
+ 231   2                      delay8us(sort[15-i]);
+ 232   2              P1=P1&pick_up[15-i];              
+ 233   2          } 
+ 234   1          while(!timer0_end)
+ 235   1              {
+ 236   2                      _nop_();
+ 237   2              }                               
+ 238   1              TR0=0;                                             
+ 239   1              
+ 240   1              
+ 241   1              timer0_start(0xee00);                                                      
+ 242   1          P2=0xff;                  
+ 243   1          delay500us(1);           
+ 244   1      
+ 245   1          for(i=0;i<8;i++)          
+ 246   1          {             
+ 247   2                      delay8us(sort[23-i]);
+ 248   2              P2=P2&pick_up[23-i];              
+ 249   2      
+ 250   2          } 
+ 251   1          while(!timer0_end)
+ 252   1              {
+ 253   2                      _nop_();
+ 254   2              }                               
+ 255   1              TR0=0;                                             
+ 256   1      }
+ 257          
+ 258          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+ 259          函数名称：control_speed_24pwm
+ 260          函数功能：同时控制24路舵机的速度
+ 261          输入    ：uchar servo[25]
+ 262          输出    ：无
+ 263          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 264          
+ 265          void control_speed_24pwm(uchar servo[25])
+ 266          {
+ 267   1                      uchar p;
+ 268   1                      uchar q;
+ 269   1      
+ 270   1                      xdata uchar div[24];
+ 271   1                      xdata uchar rem[24];
+ 272   1                      
+ 273   1                      read_changepos();
+ 274   1      
+ 275   1                      for(p=0;p<24;p++)
+ 276   1                      {
+ 277   2                              servo[p]+=changepos[p];                 
+ 278   2                              if(servo[p]>250)
+ 279   2                                      servo[p] = 250;
+ 280   2                              if(servo[p]<0)
+ 281   2                                      servo[p] = 0;
+ 282   2                      }
+ 283   1                                              
+ 284   1                      for(p=0;p<24;p++)
+ 285   1                      {
+ 286   2      
+ 287   2                              if(servo[p]>position[p])
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 6   
+
+ 288   2                              {
+ 289   3                                      div[p] = (servo[p]-position[p])/10;
+ 290   3                                      rem[p] = (servo[p]-position[p])%10;
+ 291   3                              }
+ 292   2                              if(servo[p]<position[p])
+ 293   2                              {
+ 294   3                                      div[p] = (position[p]-servo[p])/10;
+ 295   3                                      rem[p] = (position[p]-servo[p])%10;
+ 296   3                              }
+ 297   2                      }
+ 298   1      
+ 299   1                      for(q=0;q<24;q++)
+ 300   1                      {
+ 301   2                              if(servo[q]>position[q])
+ 302   2                                      position[q] += rem[q];                  
+ 303   2                              if(servo[q]<position[q])
+ 304   2                                      position[q] -= rem[q];
+ 305   2                      }
+ 306   1                      pwm24_out();                                    
+ 307   1                      for(p=0;p<10;p++)
+ 308   1                      {
+ 309   2      
+ 310   2                              for(q=0;q<24;q++)
+ 311   2                              {
+ 312   3                                      if(servo[q]>position[q])
+ 313   3                                              position[q] += div[q];
+ 314   3                                      if(servo[q]<position[q])
+ 315   3                                              position[q] -= div[q];
+ 316   3                              }       
+ 317   2                              pwm24_out();
+ 318   2                              delay1ms(servo[24]);
+ 319   2                      }
+ 320   1      
+ 321   1      } 
+ 322          
+ 323          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+ 324          函数名称：initial_position();
+ 325          函数功能：初始位置子程序，根据各个舵机的不同位置设置初始位置
+ 326          输入    ：无
+ 327          输出    ：无
+ 328          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 329          
+ 330          void position_initial(void)                 
+ 331          {
+ 332   1              uchar i,j,k,x=0;
+ 333   1              for(i=0;i<30;i++)         
+ 334   1              {       
+ 335   2                      x++;
+ 336   2                      for(k=0;k<24;k++)
+ 337   2                              position[k]=read_random(k);
+ 338   2                                                      
+ 339   2                      pwm24_out();
+ 340   2                      if(x<10)
+ 341   2              {
+ 342   3                              j=20;
+ 343   3                              j--;                             
+ 344   3                              low_level_500u(j);
+ 345   3                      }
+ 346   2                      else 
+ 347   2              {       
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 7   
+
+ 348   3                              j=10;                            
+ 349   3                          j++;
+ 350   3                      low_level_500u(j);
+ 351   3              }                                      
+ 352   2              }
+ 353   1      }
+ 354          
+ 355          
+ 356          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************
+ 357          函数名称：uart1_reinter();
+ 358          函数功能：串口1中断服务程序
+ 359          输入    ：无
+ 360          输出    ：无
+ 361          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 362          void uart1_interrupt(void) interrupt 4 
+ 363          {
+ 364   1              static char n;
+ 365   1              uchar k;         
+ 366   1      
+ 367   1              if(RI)                                  
+ 368   1              {   
+ 369   2                      RI = 0; 
+ 370   2                      posaim[n] = SBUF; 
+ 371   2                      n++;
+ 372   2                      if(n==26)
+ 373   2                      {
+ 374   3                              n=0;    
+ 375   3      
+ 376   3                              switch(posaim[25])
+ 377   3                              {
+ 378   4                                      case 0x01:
+ 379   4                                                              {
+ 380   5                                                                      RI = 0;
+ 381   5                                                                      posaim[25] = 0x00;
+ 382   5                                                                      for(k=0;k<26;k++)
+ 383   5                                                                      write_byte(eeprom_addr1+k,posaim[k]);
+ 384   5                                                                      eeprom_addr1 += 32;
+ 385   5                                                              }                       
+ 386   4                                                              break;
+ 387   4                                      case 0x02:
+ 388   4                                                              {
+ 389   5                                                                      RI = 0;
+ 390   5                                                                      posaim[25] = 0x00;
+ 391   5                                                                      for(k=0;k<26;k++)
+ 392   5                                                                      write_byte(eeprom_addr2+k,posaim[k]);
+ 393   5                                                                      eeprom_addr2 += 32;
+ 394   5                                                              }                       
+ 395   4                                                              break;
+ 396   4                                      case 0x03:
+ 397   4                                                              {
+ 398   5                                                                      RI = 0;
+ 399   5                                                                      posaim[25] = 0x00;
+ 400   5                                                                      for(k=0;k<26;k++)
+ 401   5                                                                      write_byte(eeprom_addr3+k,posaim[k]);
+ 402   5                                                                      eeprom_addr3 += 32;
+ 403   5                                                              }                       
+ 404   4                                                              break;
+ 405   4                                      case 0x04:
+ 406   4                                                              {
+ 407   5                                                                      RI = 0;
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 8   
+
+ 408   5                                                                      posaim[25] = 0x00;
+ 409   5                                                                      for(k=0;k<26;k++)
+ 410   5                                                                      write_byte(eeprom_addr4+k,posaim[k]);
+ 411   5                                                                      eeprom_addr4 += 32;
+ 412   5                                                              }                       
+ 413   4                                                              break;
+ 414   4                                      case 0x05:
+ 415   4                                                              {
+ 416   5                                                                      RI = 0;
+ 417   5                                                                      posaim[25] = 0x00;
+ 418   5                                                                      for(k=0;k<26;k++)
+ 419   5                                                                      write_byte(eeprom_addr5+k,posaim[k]);
+ 420   5                                                                      eeprom_addr5 += 32;
+ 421   5                                                              }                       
+ 422   4                                                              break;
+ 423   4                                      case 0x06:
+ 424   4                                                              {
+ 425   5                                                                      RI = 0;
+ 426   5                                                                      posaim[25] = 0x00;
+ 427   5                                                                      for(k=0;k<26;k++)
+ 428   5                                                                      write_byte(eeprom_addr6+k,posaim[k]);
+ 429   5                                                                      eeprom_addr6 += 32;
+ 430   5                                                              }                       
+ 431   4                                                              break;
+ 432   4                                      case 0x07:
+ 433   4                                                              {
+ 434   5                                                                      RI = 0;
+ 435   5                                                                      posaim[25] = 0x00;
+ 436   5                                                                      for(k=0;k<26;k++)
+ 437   5                                                                      write_byte1(eeprom_addr7+k,posaim[k]);
+ 438   5                                                                      eeprom_addr7 += 32;
+ 439   5                                                              }                       
+ 440   4                                                              break;
+ 441   4                                      case 0x08:
+ 442   4                                                              {
+ 443   5                                                                      RI = 0;
+ 444   5                                                                      posaim[25] = 0x00;
+ 445   5                                                                      for(k=0;k<26;k++)
+ 446   5                                                                      write_byte1(eeprom_addr8+k,posaim[k]);
+ 447   5                                                                      eeprom_addr8 += 32;
+ 448   5                                                              }                       
+ 449   4                                                              break;
+ 450   4                                      case 0x09:
+ 451   4                                                              {
+ 452   5                                                                      RI = 0;
+ 453   5                                                                      posaim[25] = 0x00;
+ 454   5                                                                      for(k=0;k<26;k++)
+ 455   5                                                                      write_byte1(eeprom_addr9+k,posaim[k]);
+ 456   5                                                                      eeprom_addr9 += 32;
+ 457   5                                                              }                       
+ 458   4                                                              break;
+ 459   4                                      case 0x0a:
+ 460   4                                                              {
+ 461   5                                                                      RI = 0;
+ 462   5                                                                      posaim[25] = 0x00;
+ 463   5                                                                      for(k=0;k<26;k++)
+ 464   5                                                                      write_byte1(eeprom_addr10+k,posaim[k]);
+ 465   5                                                                      eeprom_addr10 += 32;
+ 466   5                                                              }                       
+ 467   4                                                              break;
+ 468   4                                      case 0x0b:
+ 469   4                                                              {
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 9   
+
+ 470   5                                                                      RI = 0;
+ 471   5                                                                      posaim[25] = 0x00;
+ 472   5                                                                      for(k=0;k<26;k++)
+ 473   5                                                                      write_byte1(eeprom_addr11+k,posaim[k]);
+ 474   5                                                                      eeprom_addr11 += 32;
+ 475   5                                                              }                       
+ 476   4                                                              break;
+ 477   4                                      case 0x0c:
+ 478   4                                                              {
+ 479   5                                                                      RI = 0;
+ 480   5                                                                      posaim[25] = 0x00;
+ 481   5                                                                      for(k=0;k<26;k++)
+ 482   5                                                                      write_byte1(eeprom_addr12+k,posaim[k]);
+ 483   5                                                                      eeprom_addr12 += 32;
+ 484   5                                                              }                       
+ 485   4                                                              break;
+ 486   4                                      case 0xea:                                                                      //舵机偏差
+ 487   4                                                              {
+ 488   5                                                                      RI = 0;
+ 489   5                                                                      posaim[25] = 0x00;
+ 490   5                                                                      for(k=0;k<24;k++)
+ 491   5                                                                      write_byte(32+k,(uchar)posaim[k]);
+ 492   5                                                              }
+ 493   4      /********************************************/
+ 494   4                                      case 0xeb:
+ 495   4                                                              {
+ 496   5                                                                      RI = 0;
+ 497   5                                                                      posaim[25] = 0x00;
+ 498   5                                                                      for(k=0;k<26;k++)
+ 499   5                                                                      write_byte(eeprom_addr1+k,0xff);
+ 500   5                                                              }                       
+ 501   4                                                              break;
+ 502   4                                      case 0xec:
+ 503   4                                                              {
+ 504   5                                                                      RI = 0;
+ 505   5                                                                      posaim[25] = 0x00;
+ 506   5                                                                      for(k=0;k<26;k++)
+ 507   5                                                                      write_byte(eeprom_addr2+k,0xff);
+ 508   5                                                              }                       
+ 509   4                                                              break;
+ 510   4                                      case 0xed:
+ 511   4                                                              {
+ 512   5                                                                      RI = 0;
+ 513   5                                                                      posaim[25] = 0x00;
+ 514   5                                                                      for(k=0;k<26;k++)
+ 515   5                                                                      write_byte(eeprom_addr3+k,0xff);
+ 516   5                                                              }                       
+ 517   4                                                              break;
+ 518   4                                      case 0xef:
+ 519   4                                                              {
+ 520   5                                                                      RI = 0;
+ 521   5                                                                      posaim[25] = 0x00;
+ 522   5                                                                      for(k=0;k<26;k++)
+ 523   5                                                                      write_byte(eeprom_addr4+k,0xff);
+ 524   5                                                              }                       
+ 525   4                                                              break;
+ 526   4                                      case 0xf0:
+ 527   4                                                              {
+ 528   5                                                                      RI = 0;
+ 529   5                                                                      posaim[25] = 0x00;
+ 530   5                                                                      for(k=0;k<26;k++)
+ 531   5                                                                      write_byte(eeprom_addr5+k,0xff);
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 10  
+
+ 532   5                                                              }                       
+ 533   4                                                              break;
+ 534   4                                      case 0xf1:
+ 535   4                                                              {
+ 536   5                                                                      RI = 0;
+ 537   5                                                                      posaim[25] = 0x00;
+ 538   5                                                                      for(k=0;k<26;k++)
+ 539   5                                                                      write_byte(eeprom_addr6+k,0xff);
+ 540   5                                                              }                       
+ 541   4                                                              break;
+ 542   4                                      case 0xf2:
+ 543   4                                                              {
+ 544   5                                                                      RI = 0;
+ 545   5                                                                      posaim[25] = 0x00;
+ 546   5                                                                      for(k=0;k<26;k++)
+ 547   5                                                                      write_byte1(eeprom_addr7+k,0xff);
+ 548   5                                                              }                       
+ 549   4                                                              break;
+ 550   4                                      case 0xf3:
+ 551   4                                                              {
+ 552   5                                                                      RI = 0;
+ 553   5                                                                      posaim[25] = 0x00;
+ 554   5                                                                      for(k=0;k<26;k++)
+ 555   5                                                                      write_byte1(eeprom_addr8+k,0xff);
+ 556   5                                                              }                       
+ 557   4                                                              break;
+ 558   4                                      case 0xf4:
+ 559   4                                                              {
+ 560   5                                                                      RI = 0;
+ 561   5                                                                      posaim[25] = 0x00;
+ 562   5                                                                      for(k=0;k<26;k++)
+ 563   5                                                                      write_byte1(eeprom_addr9+k,0xff);
+ 564   5                                                              }                       
+ 565   4                                                              break;
+ 566   4                                      case 0xf5:
+ 567   4                                                              {
+ 568   5                                                                      RI = 0;
+ 569   5                                                                      posaim[25] = 0x00;
+ 570   5                                                                      for(k=0;k<26;k++)
+ 571   5                                                                      write_byte1(eeprom_addr10+k,0xff);
+ 572   5                                                              }                       
+ 573   4                                                              break;
+ 574   4                                      case 0xf6:
+ 575   4                                                              {
+ 576   5                                                                      RI = 0;
+ 577   5                                                                      posaim[25] = 0x00;
+ 578   5                                                                      for(k=0;k<26;k++)
+ 579   5                                                                      write_byte1(eeprom_addr11+k,0xff);
+ 580   5                                                              }                       
+ 581   4                                                              break;
+ 582   4                                      case 0xf7:
+ 583   4                                                              {
+ 584   5                                                                      RI = 0;
+ 585   5                                                                      posaim[25] = 0x00;
+ 586   5                                                                      for(k=0;k<26;k++)
+ 587   5                                                                      write_byte1(eeprom_addr12+k,0xff);
+ 588   5                                                              }                       
+ 589   4                                                              break;
+ 590   4      
+ 591   4      /********************************************/
+ 592   4                                      case 0xf8:
+ 593   4                                                              {
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 11  
+
+ 594   5                                                                 RI = 0;
+ 595   5                                                                 posaim[25] = 0x00;
+ 596   5                                                                 flag_swj = 0;
+ 597   5                                                              }
+ 598   4                                                              break;          
+ 599   4      
+ 600   4                                      case 0xf9:
+ 601   4                                                              {
+ 602   5                                                                 RI = 0;
+ 603   5                                                                 posaim[25] = 0x00;
+ 604   5                                                                 flag_swj = 1;
+ 605   5                                                              }
+ 606   4                                                              break;          
+ 607   4                                      case 0xfa:                                                                                //发送初始位置到上位机
+ 608   4                                                              {
+ 609   5                                                                      RI = 0;
+ 610   5                                                                      posaim[25]=0x00;
+ 611   5                                                                      flag_initpos=1;                                                                                                                                                                                         
+ 612   5                                                              }
+ 613   4                                                              break;
+ 614   4                                      case 0xfb:                                                                                //在线运行动作
+ 615   4                                                              {
+ 616   5                                                                      RI = 0;
+ 617   5                                                                      posaim[25]=0x00;
+ 618   5                                                                      flag_ispr=1;                            
+ 619   5                                                              }
+ 620   4                                      case 0xfc:                                                                                //在线动作组运行动作
+ 621   4                                                              {
+ 622   5                                                                      RI = 0;
+ 623   5                                                                      posaim[25]=0x00;
+ 624   5                                                                      for(n=0;n<25;n++)
+ 625   5                                                                              runmore[m][n]=posaim[n];
+ 626   5                                                                      m++;
+ 627   5                                                                      if(posaim[0]==0xff)
+ 628   5                                                                      {
+ 629   6                                                                              flag_runmore=1; 
+ 630   6                                                                              break;
+ 631   6                                                                      }                       
+ 632   5                                                              }
+ 633   4                                                              break;
+ 634   4                                      case 0xfd:                                                                                //在线调试动作
+ 635   4                                                              {
+ 636   5                                                                      RI = 0;
+ 637   5                                                                      posaim[25]=0x00;
+ 638   5                                                                      flag_run=1;                             
+ 639   5                                                              }
+ 640   4                                                              break;
+ 641   4                                      case 0xfe:                                                                                //初始位置下载到AT24256 0
+ 642   4                                                              {
+ 643   5                                                                      RI = 0;
+ 644   5                                                                      posaim[25]=0x00;
+ 645   5                                                                      for(k=0;k<26;k++)
+ 646   5                                                                              write_byte(k,posaim[k]);                                                                                                                                                                
+ 647   5                                                              }
+ 648   4                                                              break;                  
+ 649   4                                      default:
+ 650   4                                              break;
+ 651   4      
+ 652   4                              }       
+ 653   3                      
+ 654   3                      } 
+ 655   2              }       
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 12  
+
+ 656   1      }
+ 657          
+ 658          /**********************************************<+><+><+><+><+>★【robot】★<+><+><+><+><+>****************
+             -********************************                                                                                                                                                       
+ 659          函数功能：单片机初始化程序
+ 660          函数名称：mcu_init
+ 661          输入    ：无
+ 662          输出    ：无
+ 663          ***********************************************<<<<<<<<<<<<<<<★【robot】★>>>>>>>>>>>>>>>****************
+             -********************************/
+ 664          void mcu_init(void)
+ 665          {                                                                                         
+ 666   1              timer0_init();
+ 667   1              //timer1_init();
+ 668   1              uart1_init();
+ 669   1              //uart2_init();
+ 670   1              //int0_init();
+ 671   1          i2c_init();
+ 672   1              lvd_init();
+ 673   1              Fmq = 0;
+ 674   1              Qdj = 0;                                        
+ 675   1              delay500us(1);
+ 676   1              read_changepos();
+ 677   1      }
+ 678          /*********************************************************************************************************
+             -********************************
+ 679          函数名称：main
+ 680          函数功能：入口函数
+ 681          输入    ：无
+ 682          输出    ：无
+ 683          **********************************************************************************************************
+             -*******************************/
+ 684          void main(void)
+ 685          {   
+ 686   1      
+ 687   1              uint s;
+ 688   1              uint read_addr;
+ 689   1      
+ 690   1          SP=0x70;                              
+ 691   1              P0M1 = 0x00;
+ 692   1              P0M0 = 0x00;  
+ 693   1              P1M1 = 0x00;
+ 694   1              P1M0 = 0x00;   
+ 695   1              P2M1 = 0x00;
+ 696   1              P2M0 = 0x00;  
+ 697   1                
+ 698   1              mcu_init();
+ 699   1      
+ 700   1          P0 = 0xff;
+ 701   1              P1 = 0xff;
+ 702   1              P2 = 0xff;
+ 703   1              delay500ms(1);
+ 704   1              position_initial();
+ 705   1              delay500ms(1);
+ 706   1      
+ 707   1              while(1)
+ 708   1              {
+ 709   2       
+ 710   2      /*++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+ 711   2      /*====================================如果调试请按遥控器START按钮===============================*/      
+ 712   2      
+ 713   2                      if(flag_ispr)
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 13  
+
+ 714   2                      {
+ 715   3                              flag_ispr=0;
+ 716   3                              control_speed_24pwm(posaim);
+ 717   3                      } 
+ 718   2                      if(flag_run)  
+ 719   2                      {
+ 720   3                              
+ 721   3                              flag_run=0;
+ 722   3                              control_speed_24pwm(posaim);
+ 723   3                      }
+ 724   2                      if(flag_initpos)
+ 725   2                      {
+ 726   3                              flag_initpos=0;
+ 727   3      
+ 728   3                              send1_char(0xfb);                                               //以前发的是0xfe，由于断电的时候可能存在干扰，单片机自己发送0xfe;
+ 729   3                              for(s=0;s<24;s++)                                                                       
+ 730   3                                      send1_char(read_random(s));
+ 731   3                      }
+ 732   2      
+ 733   2                      if(flag_runmore)
+ 734   2                      {
+ 735   3                              flag_runmore=0;
+ 736   3                              for(n=0;n<30;n++)
+ 737   3                              {
+ 738   4                                      for(m=0;m<25;m++)
+ 739   4                                              robotrun[m] = runmore[n][m];
+ 740   4                                      if(robotrun[0]==0xff)
+ 741   4                                              break;
+ 742   4                                      control_speed_24pwm(robotrun);
+ 743   4                              }
+ 744   3                              m=0;
+ 745   3                              n=0;
+ 746   3                      }
+ 747   2      
+ 748   2      /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+ 749   2      /*=================================+++++++++++++===========================================*/
+ 750   2      
+ 751   2                      if(!flag_swj)
+ 752   2                      {
+ 753   3                          for(s=0;s<3;s++)    
+ 754   3                              {
+ 755   4                              key_scan();
+ 756   4              
+ 757   4                                  send1_char(4);
+ 758   4                                      send1_char(keybuf0);
+ 759   4                                      send1_char(5);
+ 760   4                                      send1_char(keybuf1);
+ 761   4                                              
+ 762   4                              }
+ 763   3                              if((keybuf0==0xfe)||(Qdj))                 //SELECT
+ 764   3                              {                       
+ 765   4                                      for(read_addr=5440;read_addr<10880;read_addr+=32)
+ 766   4                                      {
+ 767   5                                              for(s=0;s<25;s++)
+ 768   5                                                      robotrun[s]=read_random(read_addr+s);
+ 769   5                                              if(robotrun[0]==0xff) 
+ 770   5                                                      break;
+ 771   5                                              else
+ 772   5                                                      control_speed_24pwm(robotrun);
+ 773   5                                      }
+ 774   4                                      for(read_addr=64;read_addr<5440;read_addr+=32)
+ 775   4                                      {
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 14  
+
+ 776   5                                              for(s=0;s<25;s++)
+ 777   5                                                      robotrun[s]=read_random(read_addr+s);
+ 778   5                                              if(robotrun[0]==0xff) 
+ 779   5                                                      break;
+ 780   5                                              else
+ 781   5                                              control_speed_24pwm(robotrun);
+ 782   5                                      }
+ 783   4                                      for(read_addr=5440;read_addr<10880;read_addr+=32)
+ 784   4                                      {
+ 785   5                                              for(s=0;s<25;s++)
+ 786   5                                                      robotrun[s]=read_random1(read_addr+s);
+ 787   5                                              if(robotrun[0]==0xff) 
+ 788   5                                                      break;
+ 789   5                                              else
+ 790   5                                                      control_speed_24pwm(robotrun);
+ 791   5                                      }
+ 792   4                                      for(read_addr=0;read_addr<5440;read_addr+=32)
+ 793   4                                      {
+ 794   5                                              for(s=0;s<25;s++)
+ 795   5                                                      robotrun[s]=read_random1(read_addr+s);
+ 796   5                                              if(robotrun[0]==0xff) 
+ 797   5                                                      break;
+ 798   5                                              else
+ 799   5                                                      control_speed_24pwm(robotrun);
+ 800   5                                      }                                                        
+ 801   4                      
+ 802   4                              }  
+ 803   3                              switch(keybuf0)
+ 804   3                              {
+ 805   4                                      case 0xef :
+ 806   4      
+ 807   4                                                              for(read_addr=10880;read_addr<16320;read_addr+=32)
+ 808   4                                                              {
+ 809   5                                                                      for(s=0;s<25;s++)
+ 810   5                                                                              robotrun[s]=read_random(read_addr+s);
+ 811   5                                                                      if(robotrun[0]==0xff) 
+ 812   5                                                                              break;
+ 813   5                                                                      else
+ 814   5                                                                              control_speed_24pwm(robotrun);
+ 815   5                                                              }
+ 816   4                                                              break;
+ 817   4                                      case 0xdf :
+ 818   4                                                              for(read_addr=16320;read_addr<21760;read_addr+=32)
+ 819   4                                                              {
+ 820   5                                                                      for(s=0;s<25;s++)
+ 821   5                                                                              robotrun[s]=read_random(read_addr+s);
+ 822   5                                                                      if(robotrun[0]==0xff) 
+ 823   5                                                                              break;
+ 824   5                                                                      else
+ 825   5                                                                              control_speed_24pwm(robotrun);
+ 826   5                                                              }
+ 827   4                                                              break;
+ 828   4                                      case 0xbf:
+ 829   4                                                              for(read_addr=21760;read_addr<27200;read_addr+=32)
+ 830   4                                                              {
+ 831   5                                                                      for(s=0;s<25;s++)
+ 832   5                                                                                      robotrun[s]=read_random(read_addr+s);
+ 833   5                                                                      if(robotrun[0]==0xff)
+ 834   5                                                                              break;
+ 835   5                                                                      else
+ 836   5                                                                              control_speed_24pwm(robotrun);
+ 837   5                                                              }
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 15  
+
+ 838   4                                                              break;
+ 839   4                                      case 0x7f:
+ 840   4                                                              for(read_addr=27200;read_addr<32640;read_addr+=32)
+ 841   4                                                              {
+ 842   5                                                                      for(s=0;s<25;s++)
+ 843   5                                                                                      robotrun[s]=read_random(read_addr+s);
+ 844   5                                                                      if(robotrun[0]==0xff) 
+ 845   5                                                                              break;
+ 846   5                                                                      else
+ 847   5                                                                              control_speed_24pwm(robotrun);
+ 848   5                                                              }
+ 849   4                                                              break;
+ 850   4               
+ 851   4                                                                       
+ 852   4              
+ 853   4                                      default:
+ 854   4                                                      break;
+ 855   4                                                              
+ 856   4                              }        
+ 857   3                              switch(keybuf1)
+ 858   3                              {
+ 859   4                                      case 0xfe :
+ 860   4                                                              for(read_addr=64;read_addr<5440;read_addr+=32)
+ 861   4                                                              {
+ 862   5                                                                      for(s=0;s<25;s++)
+ 863   5                                                                                      robotrun[s]=read_random(read_addr+s);
+ 864   5                                                                      if(robotrun[0]==0xff) 
+ 865   5                                                                              break;
+ 866   5                                                                      else
+ 867   5                                                                              control_speed_24pwm(robotrun);
+ 868   5                                                              }
+ 869   4                                                              break;
+ 870   4                                      case 0xfb :
+ 871   4                                                              for(read_addr=5440;read_addr<10880;read_addr+=32)
+ 872   4                                                              {
+ 873   5                                                                      for(s=0;s<25;s++)
+ 874   5                                                                                      robotrun[s]=read_random(read_addr+s);
+ 875   5                                                                      if(robotrun[0]==0xff) break;
+ 876   5                                                                      else
+ 877   5                                                                      control_speed_24pwm(robotrun);
+ 878   5                                                              }
+ 879   4                                                              break;
+ 880   4                                      case 0xfd:
+ 881   4                                                              for(read_addr=0;read_addr<5440;read_addr+=32)
+ 882   4                                                              {
+ 883   5                                                                      for(s=0;s<25;s++)
+ 884   5                                                                              robotrun[s]=read_random1(read_addr+s);
+ 885   5                                                      
+ 886   5                                                                      if(robotrun[0]==0xff) break;
+ 887   5                                                                      else
+ 888   5                                                                      control_speed_24pwm(robotrun);
+ 889   5                                                              }
+ 890   4                                                              break;
+ 891   4                                      case 0xf7:
+ 892   4                                                              for(read_addr=5440;read_addr<10880;read_addr+=32)
+ 893   4                                                              {
+ 894   5                                                                      for(s=0;s<25;s++)
+ 895   5                                                                                      robotrun[s]=read_random1(read_addr+s);
+ 896   5                                                                      if(robotrun[0]==0xff) break;
+ 897   5                                                                      else
+ 898   5                                                                      control_speed_24pwm(robotrun);
+ 899   5                                                              }
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 16  
+
+ 900   4                                                              break;
+ 901   4                                      case 0xef:
+ 902   4                                                              for(read_addr=10880;read_addr<16320;read_addr+=32)
+ 903   4                                                              {
+ 904   5                                                                      for(s=0;s<25;s++)
+ 905   5                                                                              robotrun[s]=read_random1(read_addr+s);
+ 906   5      
+ 907   5                                                                      if(robotrun[0]==0xff) break;
+ 908   5                                                                      else
+ 909   5                                                                      control_speed_24pwm(robotrun);
+ 910   5                                                              }
+ 911   4                                                              break;
+ 912   4              
+ 913   4                                      case 0xdf:
+ 914   4                                                              for(read_addr=16320;read_addr<21760;read_addr+=32)
+ 915   4                                                              {
+ 916   5                                                                      for(s=0;s<25;s++)
+ 917   5                                                                                      robotrun[s]=read_random1(read_addr+s);
+ 918   5                                                                      if(robotrun[0]==0xff) break;
+ 919   5                                                                      else
+ 920   5                                                                      control_speed_24pwm(robotrun);
+ 921   5                                                              }
+ 922   4                                                              break;
+ 923   4              
+ 924   4                                      case 0xbf:
+ 925   4                                                              for(read_addr=21760;read_addr<27200;read_addr+=32)
+ 926   4                                                              {
+ 927   5                                                                      for(s=0;s<25;s++)
+ 928   5                                                                                      robotrun[s]=read_random1(read_addr+s);
+ 929   5                                                                      if(robotrun[0]==0xff) break;
+ 930   5                                                                      else
+ 931   5                                                                      control_speed_24pwm(robotrun);
+ 932   5                                                              }
+ 933   4                                                              break;
+ 934   4                                                       
+ 935   4                                      case 0x7f:
+ 936   4                                                              for(read_addr=27200;read_addr<32640;read_addr+=32)
+ 937   4                                                              {
+ 938   5                                                                      for(s=0;s<25;s++)
+ 939   5                                                                                      robotrun[s]=read_random1(read_addr+s);
+ 940   5                                                                      if(robotrun[0]==0xff) break;
+ 941   5                                                                      else
+ 942   5                                                                      control_speed_24pwm(robotrun);
+ 943   5                                                              }
+ 944   4                                                              break;
+ 945   4              
+ 946   4                                      default:
+ 947   4                                                      break;
+ 948   4                                                              
+ 949   4                              }
+ 950   3                      } 
+ 951   2              } 
+ 952   1      
+ 953   1      
+ 954   1      }
+ 955          
+ 956          
+ 957           
+ 958          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V9.01   LAPLACE_ROBOT                                                         11/19/2016 22:07:36 PAGE 17  
+
+   CODE SIZE        =   5099    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    926      48
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     29      29
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      5    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
